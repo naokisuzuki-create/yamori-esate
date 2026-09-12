@@ -1,1 +1,76 @@
-.brand img{object-fit:contain;width:64px;height:64px}.hero{position:relative;min-height:560px;background:#fff;overflow:hidden}.hero:before,.hero:after{display:none!important}.hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block}.hero-content{position:relative;z-index:1;min-height:560px;display:flex;align-items:center}.hero-copy{width:48%;padding:52px 0}.hero-copy h1{font-size:clamp(52px,5.4vw,76px)}.town{position:relative;min-height:320px;background:#fff;overflow:hidden}.town:before,.town:after{display:none!important}.town-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center center;display:block}.town-inner{position:relative;z-index:1;min-height:320px;display:grid;align-items:center}.town-copy{max-width:600px}@media(max-width:980px){.hero-photo{object-position:62% center}.hero-copy{width:62%}.town-photo{object-position:center center}}@media(max-width:640px){.brand img{width:48px;height:48px}.hero{min-height:0;overflow:visible}.hero-photo{position:relative;inset:auto;width:100%;height:auto;aspect-ratio:auto;object-fit:contain;object-position:center top;display:block}.hero-content{min-height:0;display:block;background:#fff}.hero-copy{width:100%;padding:30px 0 38px}.hero-copy h1{font-size:44px}.town{min-height:0;overflow:visible}.town-photo{position:relative;inset:auto;width:100%;height:auto;object-fit:contain;object-position:center;display:block}.town-inner{min-height:0;background:#fff;padding-top:28px;padding-bottom:34px;display:block}.town-copy{max-width:none}}
+/* Final image/layout overrides: explicit IMG rendering, no inherited hero/town background geometry */
+.brand img{
+  content:normal !important;
+  display:block !important;
+  width:64px !important;
+  height:64px !important;
+  object-fit:contain !important;
+  flex:0 0 auto;
+}
+
+.hero{
+  position:relative;
+  min-height:560px;
+  padding:0 !important;
+  overflow:hidden;
+  background:#fff !important;
+}
+.hero::before,.hero::after{display:none !important;content:none !important;}
+.hero-photo{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+}
+.hero-content{position:relative;z-index:2;min-height:560px;display:flex;align-items:center;}
+.hero-copy{width:48%;padding:52px 0;}
+.hero-copy h1{font-size:clamp(52px,5.4vw,76px);}
+
+.town{
+  position:relative;
+  min-height:320px;
+  padding:0 !important;
+  overflow:hidden;
+  background:#fff !important;
+}
+.town::before,.town::after{display:none !important;content:none !important;}
+.town-photo{
+  position:absolute;
+  inset:0;
+  z-index:0;
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+}
+.town-inner{position:relative;z-index:2;min-height:320px;display:flex;align-items:center;}
+.town-copy{max-width:600px;}
+
+@media(max-width:980px){
+  .hero-copy{width:62%;}
+}
+
+@media(max-width:640px){
+  .site-header{position:relative;}
+  .header-inner{min-height:108px;}
+  .brand{gap:10px;}
+  .brand img{display:block !important;width:58px !important;height:58px !important;}
+  .brand strong{font-size:18px;}
+  .brand small{font-size:9px;}
+
+  .hero{min-height:0;padding:0 !important;overflow:visible;display:flex;flex-direction:column;background:#fff !important;}
+  .hero-photo{position:relative;inset:auto;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;object-position:center;order:1;}
+  .hero-content{order:2;min-height:0;width:100%;background:#fff;display:block;}
+  .hero-copy{width:100%;padding:30px 0 38px;}
+  .hero-copy h1{font-size:44px;}
+
+  .town{min-height:0;padding:0 !important;overflow:visible;display:flex;flex-direction:column;background:#fff !important;}
+  .town-photo{position:relative;inset:auto;width:100%;height:auto;aspect-ratio:4.65/1;object-fit:cover;object-position:center;order:1;}
+  .town-inner{order:2;min-height:0;width:100%;background:#fff;display:block;padding-top:28px;padding-bottom:34px;}
+  .town-copy{max-width:none;}
+}
