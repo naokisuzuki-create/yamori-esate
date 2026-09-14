@@ -7,8 +7,47 @@ const sampleProperties = [
 {id:"003",published:true,status:"成約済",title:"寝屋川市打上 中古戸建",price:"—",address:"大阪府寝屋川市打上",station:"JR学研都市線 寝屋川公園駅",walk:"徒歩10分",layout:"3LDK",land_area:"100.5㎡",building_area:"89.1㎡",year:"2010年築",image_url:"",description:"成約事例として掲載しているサンプル物件です。"}
 ];
 
-function esc(v=""){return String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));}
-function truthy(v){return v===true||String(v).toLowerCase()==="true"||String(v)==="1"||String(v).toUpperCase()==="TRUE";}
+function esc(v=""){
+  return String(v).replace(
+    /[&<>'"]/g,
+    c=>({
+      "&":"&amp;",
+      "<":"&lt;",
+      ">":"&gt;",
+      "'":"&#39;",
+      '"':"&quot;"
+    }[c])
+  );
+}
+
+function truthy(v){
+  return v===true
+    || String(v).toLowerCase()==="true"
+    || String(v)==="1"
+    || String(v).toUpperCase()==="TRUE";
+}
+
+function normalizeImageUrl(url = ""){
+  const value = String(url).trim();
+
+  if(!value){
+    return "";
+  }
+
+  const driveFileMatch = value.match(/\/file\/d\/([^/]+)/);
+
+  if(driveFileMatch){
+    return `https://drive.google.com/thumbnail?id=${driveFileMatch[1]}&sz=w1200`;
+  }
+
+  const driveIdMatch = value.match(/[?&]id=([^&]+)/);
+
+  if(value.includes("drive.google.com") && driveIdMatch){
+    return `https://drive.google.com/thumbnail?id=${driveIdMatch[1]}&sz=w1200`;
+  }
+
+  return value;
+}
 
 async function fetchProperties(){
   try{
