@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://naokisuzuki-create.github.io/yamori-estate/sitemap.xml
