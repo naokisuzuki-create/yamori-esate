@@ -1,4 +1,4 @@
-const GAS_ENDPOINT = "";
+const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx_jhrORToigZakIlBxbKX7EuBJOtBL2MDBXNmh5DapORvBSt7kZQK0QtxjswqjBdH9/exec";
 const sampleProperties = [
 {id:"001",published:true,status:"販売中",title:"交野市郡津 中古戸建",price:"1,680万円",address:"大阪府交野市郡津",station:"京阪交野線 郡津駅",walk:"徒歩8分",layout:"4LDK",land_area:"95.2㎡",building_area:"88.4㎡",year:"2002年築",image_url:"",description:"落ち着いた住宅街にある、家族で暮らしやすい中古戸建です。"},
 {id:"002",published:true,status:"販売中",title:"枚方市藤阪 中古戸建",price:"2,480万円",address:"大阪府枚方市藤阪",station:"JR学研都市線 藤阪駅",walk:"徒歩12分",layout:"4LDK",land_area:"120.1㎡",building_area:"102.6㎡",year:"2015年築",image_url:"",description:"ゆとりある敷地と明るい室内が魅力の中古戸建です。"},
