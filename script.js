@@ -64,9 +64,12 @@ async function fetchProperties(){
 }
 
 function propertyCard(i){
-  const image=i.image_url
-    ? `<img src="${esc(i.image_url)}" alt="${esc(i.title)}" loading="lazy">`
+  const imageUrl = normalizeImageUrl(i.image_url);
+
+  const image = imageUrl
+    ? `<img src="${esc(imageUrl)}" alt="${esc(i.title)}" loading="lazy">`
     : `<div class="placeholder-house">🏠</div>`;
+
   const detailUrl=`property.html?id=${encodeURIComponent(i.id||"")}`;
   return `<article class="property-card">
     <a class="property-link" href="${detailUrl}" aria-label="${esc(i.title||"物件詳細")}の詳細を見る">
@@ -107,9 +110,12 @@ function renderPropertyDetail(items){
     detail.innerHTML=`<div class="not-found"><h1>物件が見つかりません</h1><p>公開終了、またはURLが変更された可能性があります。</p><a class="btn green" href="properties.html">物件一覧へ戻る</a></div>`;
     return;
   }
-  const image=item.image_url
-    ? `<img src="${esc(item.image_url)}" alt="${esc(item.title)}">`
+  const imageUrl = normalizeImageUrl(item.image_url);
+
+  const image = imageUrl
+    ? `<img src="${esc(imageUrl)}" alt="${esc(item.title)}">`
     : `<div class="property-detail-placeholder">🏠</div>`;
+
   document.title=`${item.title}｜ヤモリ不動産`;
   const meta=document.querySelector('meta[name="description"]');
   if(meta)meta.setAttribute("content",`${item.title}。${item.address||""} ${item.station||""} ${item.walk||""}。${item.description||""}`);
