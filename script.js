@@ -49,6 +49,28 @@ function normalizeImageUrl(url = ""){
   return value;
 }
 
+function getPropertyImages(item){
+  const images = Array.isArray(item.images)
+    ? item.images
+        .map((entry, index) => ({
+          url: normalizeImageUrl(entry.image_url || entry.url || ""),
+          type: String(entry.image_type || "photo").trim(),
+          caption: String(entry.caption || "").trim(),
+          sort: Number(entry.sort_order || index + 1)
+        }))
+        .filter(entry => entry.url)
+        .sort((a, b) => a.sort - b.sort)
+        .slice(0, 25)
+    : [];
+
+  if(images.length){
+    return images;
+  }
+
+  const fallback = normalizeImageUrl(item.image_url);
+  return fallback ? [{url:fallback,type:"photo",caption:"",sort:1}] : [];
+}
+
 async function fetchProperties(){
   try{
     const r=await fetch(`${GAS_ENDPOINT}?t=${Date.now()}`,{cache:"no-store"});
@@ -64,7 +86,8 @@ async function fetchProperties(){
 }
 
 function propertyCard(i){
-  const imageUrl = normalizeImageUrl(i.image_url);
+  const images = getPropertyImages(i);
+  const imageUrl = images[0]?.url || "";
 
   const image = imageUrl
     ? `<img src="${esc(imageUrl)}" alt="${esc(i.title)}" loading="lazy">`
@@ -101,6 +124,29 @@ function renderPropertyGrid(items){
   grid.innerHTML=list.map(propertyCard).join("");
 }
 
+function galleryMarkup(item){
+  const images = getPropertyImages(item);
+
+  if(!images.length){
+    return `<div class="property-detail-placeholder">🏠</div>`;
+  }
+
+  const main = images[0];
+  const thumbs = images.map((entry, index) => `
+    <button class="gallery-thumb${index===0?" active":""}" type="button" data-gallery-index="${index}" aria-label="画像${index+1}を表示">
+      <img src="${esc(entry.url)}" alt="${esc(entry.caption || `${item.title} 画像${index+1}`)}" loading="lazy">
+      ${entry.type === "floorplan" ? `<span class="gallery-type">間取り</span>` : ""}
+    </button>`).join("");
+
+  return `
+    <div class="property-gallery" data-gallery>
+      <button class="gallery-main" type="button" data-gallery-open="0" aria-label="画像を拡大表示">
+        <img src="${esc(main.url)}" alt="${esc(main.caption || item.title)}" data-gallery-main>
+      </button>
+      ${images.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ""}
+    </div>`;
+}
+
 function renderPropertyDetail(items){
   const detail=document.getElementById("propertyDetail");
   if(!detail)return;
@@ -110,18 +156,13 @@ function renderPropertyDetail(items){
     detail.innerHTML=`<div class="not-found"><h1>物件が見つかりません</h1><p>公開終了、またはURLが変更された可能性があります。</p><a class="btn green" href="properties.html">物件一覧へ戻る</a></div>`;
     return;
   }
-  const imageUrl = normalizeImageUrl(item.image_url);
-
-  const image = imageUrl
-    ? `<img src="${esc(imageUrl)}" alt="${esc(item.title)}">`
-    : `<div class="property-detail-placeholder">🏠</div>`;
 
   document.title=`${item.title}｜ヤモリ不動産`;
   const meta=document.querySelector('meta[name="description"]');
   if(meta)meta.setAttribute("content",`${item.title}。${item.address||""} ${item.station||""} ${item.walk||""}。${item.description||""}`);
   detail.innerHTML=`
     <div class="property-detail-head">
-      <div class="property-detail-image">${image}</div>
+      <div class="property-detail-image">${galleryMarkup(item)}</div>
       <div class="property-detail-summary">
         <span class="badge">${esc(item.status||"物件情報")}</span>
         <h1>${esc(item.title||"")}</h1>
@@ -137,7 +178,73 @@ function renderPropertyDetail(items){
       <div><dt>土地面積</dt><dd>${esc(item.land_area||"-")}</dd></div>
       <div><dt>建物面積</dt><dd>${esc(item.building_area||"-")}</dd></div>
       <div><dt>築年</dt><dd>${esc(item.year||"-")}</dd></div>
-    </dl>`;
+    </dl>
+    <div class="gallery-lightbox" data-lightbox hidden>
+      <button class="lightbox-close" type="button" aria-label="閉じる">×</button>
+      <button class="lightbox-prev" type="button" aria-label="前の画像">‹</button>
+      <figure><img src="" alt="" data-lightbox-image><figcaption data-lightbox-caption></figcaption></figure>
+      <button class="lightbox-next" type="button" aria-label="次の画像">›</button>
+    </div>`;
+
+  setupGallery(item);
+}
+
+function setupGallery(item){
+  const gallery=document.querySelector("[data-gallery]");
+  if(!gallery)return;
+
+  const images=getPropertyImages(item);
+  if(!images.length)return;
+
+  const main=gallery.querySelector("[data-gallery-main]");
+  const mainButton=gallery.querySelector("[data-gallery-open]");
+  const thumbs=[...gallery.querySelectorAll("[data-gallery-index]")];
+  const lightbox=document.querySelector("[data-lightbox]");
+  const lightboxImage=lightbox?.querySelector("[data-lightbox-image]");
+  const lightboxCaption=lightbox?.querySelector("[data-lightbox-caption]");
+  let currentIndex=0;
+
+  const setCurrent=index=>{
+    currentIndex=(index+images.length)%images.length;
+    const entry=images[currentIndex];
+    if(main){
+      main.src=entry.url;
+      main.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;
+    }
+    if(mainButton)mainButton.dataset.galleryOpen=String(currentIndex);
+    thumbs.forEach((thumb,i)=>thumb.classList.toggle("active",i===currentIndex));
+  };
+
+  const openLightbox=index=>{
+    if(!lightbox||!lightboxImage)return;
+    currentIndex=(index+images.length)%images.length;
+    const entry=images[currentIndex];
+    lightboxImage.src=entry.url;
+    lightboxImage.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;
+    if(lightboxCaption)lightboxCaption.textContent=entry.caption || `${currentIndex+1} / ${images.length}`;
+    lightbox.hidden=false;
+    document.body.classList.add("lightbox-open");
+  };
+
+  const closeLightbox=()=>{
+    if(!lightbox)return;
+    lightbox.hidden=true;
+    document.body.classList.remove("lightbox-open");
+  };
+
+  thumbs.forEach(thumb=>thumb.addEventListener("click",()=>setCurrent(Number(thumb.dataset.galleryIndex||0))));
+  mainButton?.addEventListener("click",()=>openLightbox(Number(mainButton.dataset.galleryOpen||0)));
+  lightbox?.querySelector(".lightbox-close")?.addEventListener("click",closeLightbox);
+  lightbox?.querySelector(".lightbox-prev")?.addEventListener("click",()=>openLightbox(currentIndex-1));
+  lightbox?.querySelector(".lightbox-next")?.addEventListener("click",()=>openLightbox(currentIndex+1));
+  lightbox?.addEventListener("click",e=>{if(e.target===lightbox)closeLightbox();});
+
+  document.addEventListener("keydown",e=>{
+    if(!lightbox||lightbox.hidden)return;
+    if(e.key==="Escape")closeLightbox();
+    if(e.key==="ArrowLeft")openLightbox(currentIndex-1);
+    if(e.key==="ArrowRight")openLightbox(currentIndex+1);
+  });
 }
 
 function setupContactForm(){
