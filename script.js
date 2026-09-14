@@ -109,10 +109,9 @@ async function fetchPropertiesOnce(){
 }
 
 function propertyCard(i){
-  const images=getPropertyImages(i);
-  const first=images[0];
-  const image=first
-    ? `<img ${imgAttrs(first.rawUrl,i.title,true)}>`
+  const cardImageUrl=String(i.image_url||"").trim();
+  const image=cardImageUrl
+    ? `<img ${imgAttrs(cardImageUrl,i.title,true)}>`
     : `<div class="placeholder-house">🏠</div>`;
   const detailUrl=`property.html?id=${encodeURIComponent(normalizePropertyId(i.id))}`;
   return `<article class="property-card">
