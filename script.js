@@ -1,6 +1,6 @@
 const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx_jhrORToigZakIlBxbKX7EuBJOtBL2MDBXNmh5DapORvBSt7kZQK0QtxjswqjBdH9/exec";
 const CONTACT_EMAIL = "info@yamori-estate.jp";
-const PROPERTY_CACHE_KEY = "yamori-properties-v1";
+const PROPERTY_CACHE_KEY = "yamori-properties-v2";
 
 const sampleProperties = [
 {id:"1",published:true,status:"販売中",title:"交野市郡津 中古戸建",price:"1,680万円",address:"大阪府交野市郡津",station:"京阪交野線 郡津駅",walk:"徒歩8分",layout:"4LDK",land_area:"95.2㎡",building_area:"88.4㎡",year:"2002年築",image_url:"",description:"落ち着いた住宅街にある、家族で暮らしやすい中古戸建です。"},
@@ -9,17 +9,11 @@ const sampleProperties = [
 ];
 
 function esc(v=""){
-  return String(v).replace(
-    /[&<>'"]/g,
-    c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])
-  );
+  return String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 }
 
 function truthy(v){
-  return v===true
-    || String(v).toLowerCase()==="true"
-    || String(v)==="1"
-    || String(v).toUpperCase()==="TRUE";
+  return v===true || String(v).toLowerCase()==="true" || String(v)==="1" || String(v).toUpperCase()==="TRUE";
 }
 
 function normalizePropertyId(value){
@@ -28,41 +22,64 @@ function normalizePropertyId(value){
   return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
 }
 
-function normalizeImageUrl(url = ""){
-  const value = String(url).trim();
+function extractDriveId(url=""){
+  const value=String(url).trim();
+  const fileMatch=value.match(/\/file\/d\/([^/]+)/);
+  if(fileMatch)return fileMatch[1];
+  const idMatch=value.match(/[?&]id=([^&]+)/);
+  if(value.includes("drive.google.com")&&idMatch)return idMatch[1];
+  const lh3Match=value.match(/googleusercontent\.com\/d\/([^/=]+)/);
+  if(lh3Match)return lh3Match[1];
+  return "";
+}
+
+function normalizeImageUrl(url=""){
+  const value=String(url).trim();
   if(!value)return "";
-
-  const driveFileMatch = value.match(/\/file\/d\/([^/]+)/);
-  if(driveFileMatch){
-    return `https://lh3.googleusercontent.com/d/${driveFileMatch[1]}`;
+  const driveId=extractDriveId(value);
+  if(driveId){
+    return `https://drive.google.com/thumbnail?id=${encodeURIComponent(driveId)}&sz=w1600`;
   }
-
-  const driveIdMatch = value.match(/[?&]id=([^&]+)/);
-  if(value.includes("drive.google.com") && driveIdMatch){
-    return `https://lh3.googleusercontent.com/d/${driveIdMatch[1]}`;
-  }
-
   return value;
 }
 
+function driveFallbackUrl(url=""){
+  const driveId=extractDriveId(url);
+  return driveId ? `https://lh3.googleusercontent.com/d/${driveId}` : "";
+}
+
+function imgAttrs(url,alt,lazy=true){
+  const primary=normalizeImageUrl(url);
+  const fallback=driveFallbackUrl(url);
+  if(!primary)return "";
+  return `src="${esc(primary)}" alt="${esc(alt)}"${lazy?' loading="lazy"':''} referrerpolicy="no-referrer"${fallback?` data-fallback-src="${esc(fallback)}" onerror="retryPropertyImage(this)"`:''}`;
+}
+
+function retryPropertyImage(img){
+  const fallback=img.dataset.fallbackSrc;
+  if(fallback&&img.src!==fallback){
+    img.onerror=null;
+    img.src=fallback;
+  }
+}
+
 function getPropertyImages(item){
-  const images = Array.isArray(item.images)
+  const images=Array.isArray(item.images)
     ? item.images
-        .map((entry, index) => ({
-          url: normalizeImageUrl(entry.image_url || entry.url || ""),
-          type: String(entry.image_type || "photo").trim(),
-          caption: String(entry.caption || "").trim(),
-          sort: Number(entry.sort_order || index + 1)
+        .map((entry,index)=>({
+          rawUrl:String(entry.image_url||entry.url||"").trim(),
+          type:String(entry.image_type||"photo").trim(),
+          caption:String(entry.caption||"").trim(),
+          sort:Number(entry.sort_order||index+1)
         }))
-        .filter(entry => entry.url)
-        .sort((a, b) => a.sort - b.sort)
-        .slice(0, 25)
+        .filter(entry=>entry.rawUrl)
+        .sort((a,b)=>a.sort-b.sort)
+        .slice(0,25)
     : [];
 
   if(images.length)return images;
-
-  const fallback = normalizeImageUrl(item.image_url);
-  return fallback ? [{url:fallback,type:"photo",caption:"",sort:1}] : [];
+  const fallback=String(item.image_url||"").trim();
+  return fallback?[{rawUrl:fallback,type:"photo",caption:"",sort:1}]:[];
 }
 
 function readPropertyCache(){
@@ -70,64 +87,33 @@ function readPropertyCache(){
     const raw=localStorage.getItem(PROPERTY_CACHE_KEY);
     if(!raw)return null;
     const parsed=JSON.parse(raw);
-    return Array.isArray(parsed?.properties) ? parsed.properties : null;
-  }catch(e){
-    return null;
-  }
+    return Array.isArray(parsed?.properties)?parsed.properties:null;
+  }catch(e){return null;}
 }
 
 function writePropertyCache(items){
-  try{
-    localStorage.setItem(PROPERTY_CACHE_KEY,JSON.stringify({savedAt:Date.now(),properties:items}));
-  }catch(e){}
+  try{localStorage.setItem(PROPERTY_CACHE_KEY,JSON.stringify({savedAt:Date.now(),properties:items}));}catch(e){}
 }
 
 async function fetchPropertiesOnce(){
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),8000);
+  const timer=setTimeout(()=>controller.abort(),5000);
   try{
-    const r=await fetch(`${GAS_ENDPOINT}?t=${Date.now()}`,{
-      cache:"no-store",
-      signal:controller.signal
-    });
+    const r=await fetch(GAS_ENDPOINT,{cache:"default",signal:controller.signal});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
     const items=Array.isArray(d)?d:d.properties;
     if(!Array.isArray(items))throw new Error("Unexpected response format");
     return items;
-  }finally{
-    clearTimeout(timer);
-  }
-}
-
-async function fetchProperties(){
-  const cached=readPropertyCache();
-  try{
-    const items=await fetchPropertiesOnce();
-    writePropertyCache(items);
-    return items;
-  }catch(firstError){
-    console.warn("Property fetch failed once; retrying.",firstError);
-    try{
-      await new Promise(resolve=>setTimeout(resolve,500));
-      const items=await fetchPropertiesOnce();
-      writePropertyCache(items);
-      return items;
-    }catch(secondError){
-      console.error("Property fetch failed twice.",secondError);
-      if(cached?.length)return cached;
-      return sampleProperties;
-    }
-  }
+  }finally{clearTimeout(timer);}
 }
 
 function propertyCard(i){
-  const images = getPropertyImages(i);
-  const imageUrl = images[0]?.url || "";
-  const image = imageUrl
-    ? `<img src="${esc(imageUrl)}" alt="${esc(i.title)}" loading="lazy" referrerpolicy="no-referrer">`
+  const images=getPropertyImages(i);
+  const first=images[0];
+  const image=first
+    ? `<img ${imgAttrs(first.rawUrl,i.title,true)}>`
     : `<div class="placeholder-house">🏠</div>`;
-
   const detailUrl=`property.html?id=${encodeURIComponent(normalizePropertyId(i.id))}`;
   return `<article class="property-card">
     <a class="property-link" href="${detailUrl}" aria-label="${esc(i.title||"物件詳細")}の詳細を見る">
@@ -160,22 +146,20 @@ function renderPropertyGrid(items){
 }
 
 function galleryMarkup(item){
-  const images = getPropertyImages(item);
+  const images=getPropertyImages(item);
   if(!images.length)return `<div class="property-detail-placeholder">🏠</div>`;
-
-  const main = images[0];
-  const thumbs = images.map((entry, index) => `
+  const main=images[0];
+  const thumbs=images.map((entry,index)=>`
     <button class="gallery-thumb${index===0?" active":""}" type="button" data-gallery-index="${index}" aria-label="画像${index+1}を表示">
-      <img src="${esc(entry.url)}" alt="${esc(entry.caption || `${item.title} 画像${index+1}`)}" loading="lazy" referrerpolicy="no-referrer">
-      ${entry.type === "floorplan" ? `<span class="gallery-type">間取り</span>` : ""}
+      <img ${imgAttrs(entry.rawUrl,entry.caption||`${item.title} 画像${index+1}`,true)}>
+      ${entry.type==="floorplan"?`<span class="gallery-type">間取り</span>`:""}
     </button>`).join("");
-
   return `
     <div class="property-gallery" data-gallery>
       <button class="gallery-main" type="button" data-gallery-open="0" aria-label="画像を拡大表示">
-        <img src="${esc(main.url)}" alt="${esc(main.caption || item.title)}" data-gallery-main referrerpolicy="no-referrer">
+        <img ${imgAttrs(main.rawUrl,main.caption||item.title,false)} data-gallery-main>
       </button>
-      ${images.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ""}
+      ${images.length>1?`<div class="gallery-thumbs">${thumbs}</div>`:""}
     </div>`;
 }
 
@@ -217,7 +201,6 @@ function renderPropertyDetail(items){
       <figure><img src="" alt="" data-lightbox-image><figcaption data-lightbox-caption></figcaption></figure>
       <button class="lightbox-next" type="button" aria-label="次の画像">›</button>
     </div>`;
-
   setupGallery(item);
 }
 
@@ -226,7 +209,6 @@ function setupGallery(item){
   if(!gallery)return;
   const images=getPropertyImages(item);
   if(!images.length)return;
-
   const main=gallery.querySelector("[data-gallery-main]");
   const mainButton=gallery.querySelector("[data-gallery-open]");
   const thumbs=[...gallery.querySelectorAll("[data-gallery-index]")];
@@ -238,7 +220,12 @@ function setupGallery(item){
   const setCurrent=index=>{
     currentIndex=(index+images.length)%images.length;
     const entry=images[currentIndex];
-    if(main){main.src=entry.url;main.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;}
+    if(main){
+      main.src=normalizeImageUrl(entry.rawUrl);
+      main.dataset.fallbackSrc=driveFallbackUrl(entry.rawUrl);
+      main.onerror=()=>retryPropertyImage(main);
+      main.alt=entry.caption||`${item.title} 画像${currentIndex+1}`;
+    }
     if(mainButton)mainButton.dataset.galleryOpen=String(currentIndex);
     thumbs.forEach((thumb,i)=>thumb.classList.toggle("active",i===currentIndex));
   };
@@ -247,9 +234,11 @@ function setupGallery(item){
     if(!lightbox||!lightboxImage)return;
     currentIndex=(index+images.length)%images.length;
     const entry=images[currentIndex];
-    lightboxImage.src=entry.url;
-    lightboxImage.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;
-    if(lightboxCaption)lightboxCaption.textContent=entry.caption || `${currentIndex+1} / ${images.length}`;
+    lightboxImage.src=normalizeImageUrl(entry.rawUrl);
+    lightboxImage.dataset.fallbackSrc=driveFallbackUrl(entry.rawUrl);
+    lightboxImage.onerror=()=>retryPropertyImage(lightboxImage);
+    lightboxImage.alt=entry.caption||`${item.title} 画像${currentIndex+1}`;
+    if(lightboxCaption)lightboxCaption.textContent=entry.caption||`${currentIndex+1} / ${images.length}`;
     lightbox.hidden=false;
     document.body.classList.add("lightbox-open");
   };
@@ -292,14 +281,30 @@ function setupContactForm(){
   });
 }
 
-async function init(){
+function renderPropertyViews(items){
+  renderPropertyGrid(items);
+  renderPropertyDetail(items);
+}
+
+async function refreshPropertiesInBackground(){
+  try{
+    const items=await fetchPropertiesOnce();
+    writePropertyCache(items);
+    renderPropertyViews(items);
+  }catch(err){
+    console.warn("Property refresh failed.",err);
+  }
+}
+
+function init(){
   const year=document.getElementById("year");
   if(year)year.textContent=new Date().getFullYear();
   setupContactForm();
+
   if(document.getElementById("propertyGrid")||document.getElementById("propertyDetail")){
-    const items=await fetchProperties();
-    renderPropertyGrid(items);
-    renderPropertyDetail(items);
+    const cached=readPropertyCache();
+    renderPropertyViews(cached?.length?cached:sampleProperties);
+    refreshPropertiesInBackground();
   }
 }
 
