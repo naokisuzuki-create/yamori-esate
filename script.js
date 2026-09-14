@@ -1,22 +1,17 @@
 const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbx_jhrORToigZakIlBxbKX7EuBJOtBL2MDBXNmh5DapORvBSt7kZQK0QtxjswqjBdH9/exec";
 const CONTACT_EMAIL = "info@yamori-estate.jp";
+const PROPERTY_CACHE_KEY = "yamori-properties-v1";
 
 const sampleProperties = [
-{id:"001",published:true,status:"販売中",title:"交野市郡津 中古戸建",price:"1,680万円",address:"大阪府交野市郡津",station:"京阪交野線 郡津駅",walk:"徒歩8分",layout:"4LDK",land_area:"95.2㎡",building_area:"88.4㎡",year:"2002年築",image_url:"",description:"落ち着いた住宅街にある、家族で暮らしやすい中古戸建です。"},
-{id:"002",published:true,status:"販売中",title:"枚方市藤阪 中古戸建",price:"2,480万円",address:"大阪府枚方市藤阪",station:"JR学研都市線 藤阪駅",walk:"徒歩12分",layout:"4LDK",land_area:"120.1㎡",building_area:"102.6㎡",year:"2015年築",image_url:"",description:"ゆとりある敷地と明るい室内が魅力の中古戸建です。"},
-{id:"003",published:true,status:"成約済",title:"寝屋川市打上 中古戸建",price:"—",address:"大阪府寝屋川市打上",station:"JR学研都市線 寝屋川公園駅",walk:"徒歩10分",layout:"3LDK",land_area:"100.5㎡",building_area:"89.1㎡",year:"2010年築",image_url:"",description:"成約事例として掲載しているサンプル物件です。"}
+{id:"1",published:true,status:"販売中",title:"交野市郡津 中古戸建",price:"1,680万円",address:"大阪府交野市郡津",station:"京阪交野線 郡津駅",walk:"徒歩8分",layout:"4LDK",land_area:"95.2㎡",building_area:"88.4㎡",year:"2002年築",image_url:"",description:"落ち着いた住宅街にある、家族で暮らしやすい中古戸建です。"},
+{id:"2",published:true,status:"販売中",title:"枚方市藤阪 中古戸建",price:"2,480万円",address:"大阪府枚方市藤阪",station:"JR学研都市線 藤阪駅",walk:"徒歩12分",layout:"4LDK",land_area:"120.1㎡",building_area:"102.6㎡",year:"2015年築",image_url:"",description:"ゆとりある敷地と明るい室内が魅力の中古戸建です。"},
+{id:"3",published:true,status:"成約済",title:"寝屋川市打上 中古戸建",price:"—",address:"大阪府寝屋川市打上",station:"JR学研都市線 寝屋川公園駅",walk:"徒歩10分",layout:"3LDK",land_area:"100.5㎡",building_area:"89.1㎡",year:"2010年築",image_url:"",description:"成約事例として掲載しているサンプル物件です。"}
 ];
 
 function esc(v=""){
   return String(v).replace(
     /[&<>'"]/g,
-    c=>({
-      "&":"&amp;",
-      "<":"&lt;",
-      ">":"&gt;",
-      "'":"&#39;",
-      '"':"&quot;"
-    }[c])
+    c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c])
   );
 }
 
@@ -27,21 +22,22 @@ function truthy(v){
     || String(v).toUpperCase()==="TRUE";
 }
 
+function normalizePropertyId(value){
+  const raw=String(value??"").trim();
+  if(!raw)return "";
+  return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
+}
+
 function normalizeImageUrl(url = ""){
   const value = String(url).trim();
-
-  if(!value){
-    return "";
-  }
+  if(!value)return "";
 
   const driveFileMatch = value.match(/\/file\/d\/([^/]+)/);
-
   if(driveFileMatch){
     return `https://lh3.googleusercontent.com/d/${driveFileMatch[1]}`;
   }
 
   const driveIdMatch = value.match(/[?&]id=([^&]+)/);
-
   if(value.includes("drive.google.com") && driveIdMatch){
     return `https://lh3.googleusercontent.com/d/${driveIdMatch[1]}`;
   }
@@ -63,37 +59,76 @@ function getPropertyImages(item){
         .slice(0, 25)
     : [];
 
-  if(images.length){
-    return images;
-  }
+  if(images.length)return images;
 
   const fallback = normalizeImageUrl(item.image_url);
   return fallback ? [{url:fallback,type:"photo",caption:"",sort:1}] : [];
 }
 
-async function fetchProperties(){
+function readPropertyCache(){
   try{
-    const r=await fetch(`${GAS_ENDPOINT}?t=${Date.now()}`,{cache:"no-store"});
+    const raw=localStorage.getItem(PROPERTY_CACHE_KEY);
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    return Array.isArray(parsed?.properties) ? parsed.properties : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function writePropertyCache(items){
+  try{
+    localStorage.setItem(PROPERTY_CACHE_KEY,JSON.stringify({savedAt:Date.now(),properties:items}));
+  }catch(e){}
+}
+
+async function fetchPropertiesOnce(){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),8000);
+  try{
+    const r=await fetch(`${GAS_ENDPOINT}?t=${Date.now()}`,{
+      cache:"no-store",
+      signal:controller.signal
+    });
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const d=await r.json();
     const items=Array.isArray(d)?d:d.properties;
     if(!Array.isArray(items))throw new Error("Unexpected response format");
     return items;
-  }catch(e){
-    console.error(e);
-    return sampleProperties;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+async function fetchProperties(){
+  const cached=readPropertyCache();
+  try{
+    const items=await fetchPropertiesOnce();
+    writePropertyCache(items);
+    return items;
+  }catch(firstError){
+    console.warn("Property fetch failed once; retrying.",firstError);
+    try{
+      await new Promise(resolve=>setTimeout(resolve,500));
+      const items=await fetchPropertiesOnce();
+      writePropertyCache(items);
+      return items;
+    }catch(secondError){
+      console.error("Property fetch failed twice.",secondError);
+      if(cached?.length)return cached;
+      return sampleProperties;
+    }
   }
 }
 
 function propertyCard(i){
   const images = getPropertyImages(i);
   const imageUrl = images[0]?.url || "";
-
   const image = imageUrl
-    ? `<img src="${esc(imageUrl)}" alt="${esc(i.title)}" loading="lazy">`
+    ? `<img src="${esc(imageUrl)}" alt="${esc(i.title)}" loading="lazy" referrerpolicy="no-referrer">`
     : `<div class="placeholder-house">🏠</div>`;
 
-  const detailUrl=`property.html?id=${encodeURIComponent(i.id||"")}`;
+  const detailUrl=`property.html?id=${encodeURIComponent(normalizePropertyId(i.id))}`;
   return `<article class="property-card">
     <a class="property-link" href="${detailUrl}" aria-label="${esc(i.title||"物件詳細")}の詳細を見る">
       <div class="property-image">${image}</div>
@@ -126,22 +161,19 @@ function renderPropertyGrid(items){
 
 function galleryMarkup(item){
   const images = getPropertyImages(item);
-
-  if(!images.length){
-    return `<div class="property-detail-placeholder">🏠</div>`;
-  }
+  if(!images.length)return `<div class="property-detail-placeholder">🏠</div>`;
 
   const main = images[0];
   const thumbs = images.map((entry, index) => `
     <button class="gallery-thumb${index===0?" active":""}" type="button" data-gallery-index="${index}" aria-label="画像${index+1}を表示">
-      <img src="${esc(entry.url)}" alt="${esc(entry.caption || `${item.title} 画像${index+1}`)}" loading="lazy">
+      <img src="${esc(entry.url)}" alt="${esc(entry.caption || `${item.title} 画像${index+1}`)}" loading="lazy" referrerpolicy="no-referrer">
       ${entry.type === "floorplan" ? `<span class="gallery-type">間取り</span>` : ""}
     </button>`).join("");
 
   return `
     <div class="property-gallery" data-gallery>
       <button class="gallery-main" type="button" data-gallery-open="0" aria-label="画像を拡大表示">
-        <img src="${esc(main.url)}" alt="${esc(main.caption || item.title)}" data-gallery-main>
+        <img src="${esc(main.url)}" alt="${esc(main.caption || item.title)}" data-gallery-main referrerpolicy="no-referrer">
       </button>
       ${images.length > 1 ? `<div class="gallery-thumbs">${thumbs}</div>` : ""}
     </div>`;
@@ -150,8 +182,8 @@ function galleryMarkup(item){
 function renderPropertyDetail(items){
   const detail=document.getElementById("propertyDetail");
   if(!detail)return;
-  const id=new URLSearchParams(location.search).get("id");
-  const item=items.find(i=>String(i.id)===String(id)&&truthy(i.published));
+  const id=normalizePropertyId(new URLSearchParams(location.search).get("id"));
+  const item=items.find(i=>normalizePropertyId(i.id)===id&&truthy(i.published));
   if(!item){
     detail.innerHTML=`<div class="not-found"><h1>物件が見つかりません</h1><p>公開終了、またはURLが変更された可能性があります。</p><a class="btn green" href="properties.html">物件一覧へ戻る</a></div>`;
     return;
@@ -192,7 +224,6 @@ function renderPropertyDetail(items){
 function setupGallery(item){
   const gallery=document.querySelector("[data-gallery]");
   if(!gallery)return;
-
   const images=getPropertyImages(item);
   if(!images.length)return;
 
@@ -207,10 +238,7 @@ function setupGallery(item){
   const setCurrent=index=>{
     currentIndex=(index+images.length)%images.length;
     const entry=images[currentIndex];
-    if(main){
-      main.src=entry.url;
-      main.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;
-    }
+    if(main){main.src=entry.url;main.alt=entry.caption || `${item.title} 画像${currentIndex+1}`;}
     if(mainButton)mainButton.dataset.galleryOpen=String(currentIndex);
     thumbs.forEach((thumb,i)=>thumb.classList.toggle("active",i===currentIndex));
   };
