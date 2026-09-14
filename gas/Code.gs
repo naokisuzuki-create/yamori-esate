@@ -1,42 +1,65 @@
-const SHEET_NAME = 'properties';
-const IMAGE_SHEET_NAME = 'property_images';
+const PROPERTY_SHEET = '物件';
+const IMAGE_SHEET = 'property_images';
+const FEED_CACHE_KEY = 'yamori-property-feed-v1';
+const FEED_CACHE_SECONDS = 300;
 
-function doGet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    return json_({ error: `Sheet not found: ${SHEET_NAME}` });
+function doGet(e) {
+  const cache = CacheService.getScriptCache();
+  const forceRefresh = e && e.parameter && e.parameter.refresh === '1';
+
+  if (!forceRefresh) {
+    const cached = cache.get(FEED_CACHE_KEY);
+    if (cached) {
+      return ContentService
+        .createTextOutput(cached)
+        .setMimeType(ContentService.MimeType.JSON);
+    }
   }
 
-  const properties = sheetToObjects_(sheet);
-  const imageSheet = ss.getSheetByName(IMAGE_SHEET_NAME);
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const propertySheet = ss.getSheetByName(PROPERTY_SHEET);
+
+  if (!propertySheet) {
+    return json_({ error: `Sheet not found: ${PROPERTY_SHEET}` });
+  }
+
+  const properties = sheetToObjects_(propertySheet);
+  const imageSheet = ss.getSheetByName(IMAGE_SHEET);
   const images = imageSheet ? sheetToObjects_(imageSheet) : [];
 
   const imagesByProperty = {};
+
   images
-    .filter(row => row.property_id && truthy_(row.published === '' ? true : row.published))
+    .filter(row => String(row.property_id || '').trim() !== '')
     .sort((a, b) => Number(a.sort_order || 999) - Number(b.sort_order || 999))
     .forEach(row => {
-      const id = String(row.property_id).trim();
+      const id = normalizePropertyId_(row.property_id);
       if (!imagesByProperty[id]) imagesByProperty[id] = [];
+
       if (imagesByProperty[id].length < 25) {
         imagesByProperty[id].push({
-          image_url: row.image_url || '',
-          image_type: row.image_type || 'photo',
-          caption: row.caption || '',
-          sort_order: row.sort_order || ''
+          image_url: String(row.image_url || '').trim(),
+          image_type: String(row.image_type || 'photo').trim(),
+          caption: String(row.caption || '').trim(),
+          sort_order: String(row.sort_order || '').trim()
         });
       }
     });
 
   const enriched = properties.map(property => {
-    const id = String(property.id || '').trim();
+    const id = normalizePropertyId_(property.id);
     return Object.assign({}, property, {
+      id,
       images: imagesByProperty[id] || []
     });
   });
 
-  return json_({ properties: enriched });
+  const payload = JSON.stringify({ properties: enriched });
+  cache.put(FEED_CACHE_KEY, payload, FEED_CACHE_SECONDS);
+
+  return ContentService
+    .createTextOutput(payload)
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -92,20 +115,17 @@ function doPost(e) {
       return json_({ ok: false, error: 'Required fields are missing.' });
     }
 
-    const subject = `【ヤモリ不動産Web】${type || 'お問い合わせ'} - ${name}`;
-    const text = [
-      `お名前：${name}`,
-      `メール：${email}`,
-      `電話番号：${phone || '未入力'}`,
-      `ご相談内容：${type || '未選択'}`,
-      '',
-      message
-    ].join('\n');
-
     MailApp.sendEmail({
       to,
-      subject,
-      body: text,
+      subject: `【ヤモリ不動産Web】${type || 'お問い合わせ'} - ${name}`,
+      body: [
+        `お名前：${name}`,
+        `メール：${email}`,
+        `電話番号：${phone || '未入力'}`,
+        `ご相談内容：${type || '未選択'}`,
+        '',
+        message
+      ].join('\n'),
       replyTo: email
     });
 
@@ -120,10 +140,7 @@ function doPost(e) {
 function verifyTurnstile_(secret, token) {
   const response = UrlFetchApp.fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
     method: 'post',
-    payload: {
-      secret,
-      response: token
-    },
+    payload: { secret, response: token },
     muteHttpExceptions: true
   });
 
@@ -137,17 +154,23 @@ function sheetToObjects_(sheet) {
   if (values.length < 2) return [];
 
   const headers = values[0].map(h => String(h).trim());
-  return values.slice(1)
+
+  return values
+    .slice(1)
     .filter(row => row.some(cell => String(cell).trim() !== ''))
     .map(row => {
       const obj = {};
-      headers.forEach((header, i) => obj[header] = row[i]);
+      headers.forEach((header, i) => {
+        obj[header] = String(row[i] ?? '').trim();
+      });
       return obj;
     });
 }
 
-function truthy_(v) {
-  return v === true || String(v).toLowerCase() === 'true' || String(v) === '1' || String(v).toUpperCase() === 'TRUE';
+function normalizePropertyId_(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return /^\d+$/.test(raw) ? String(Number(raw)) : raw;
 }
 
 function json_(payload) {
