@@ -37,13 +37,13 @@ function normalizeImageUrl(url = ""){
   const driveFileMatch = value.match(/\/file\/d\/([^/]+)/);
 
   if(driveFileMatch){
-    return `https://drive.google.com/thumbnail?id=${driveFileMatch[1]}&sz=w1200`;
+    return `https://lh3.googleusercontent.com/d/${driveFileMatch[1]}`;
   }
 
   const driveIdMatch = value.match(/[?&]id=([^&]+)/);
 
   if(value.includes("drive.google.com") && driveIdMatch){
-    return `https://drive.google.com/thumbnail?id=${driveIdMatch[1]}&sz=w1200`;
+    return `https://lh3.googleusercontent.com/d/${driveIdMatch[1]}`;
   }
 
   return value;
