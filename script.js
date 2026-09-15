@@ -175,6 +175,7 @@ function renderPropertyDetail(items){
   document.title=`${item.title}｜ヤモリ不動産`;
   const meta=document.querySelector('meta[name="description"]');
   if(meta)meta.setAttribute("content",`${item.title}。${item.address||""} ${item.station||""} ${item.walk||""}。${item.description||""}`);
+  const contactUrl=`index.html?property=${encodeURIComponent(normalizePropertyId(item.id))}#contact`;
   detail.innerHTML=`
     <div class="property-detail-head">
       <div class="property-detail-image">${galleryMarkup(item)}</div>
@@ -183,7 +184,7 @@ function renderPropertyDetail(items){
         <h1>${esc(item.title||"")}</h1>
         <p class="detail-price">${esc(item.price||"価格未定")}</p>
         <p>${esc(item.description||"")}</p>
-        <a class="btn green" href="index.html#contact">この物件について相談する</a>
+        <a class="btn green" href="${contactUrl}">この物件について相談する</a>
       </div>
     </div>
     <dl class="property-specs">
@@ -280,9 +281,39 @@ function setupContactForm(){
   });
 }
 
+function prefillPropertyContact(items){
+  const form=document.getElementById("contactFormSecure");
+  if(!form)return;
+
+  const propertyId=normalizePropertyId(new URLSearchParams(location.search).get("property"));
+  if(!propertyId)return;
+
+  const item=items.find(i=>normalizePropertyId(i.id)===propertyId&&truthy(i.published));
+  if(!item)return;
+
+  const type=form.elements.namedItem("type");
+  const message=form.elements.namedItem("message");
+
+  if(type)type.value="物件購入";
+  if(!message||message.dataset.propertyPrefilled==="true")return;
+
+  message.value=[
+    '【お問い合わせ物件】',
+    `物件名：${item.title||'物件名未設定'}`,
+    `価格：${item.price||'価格未定'}`,
+    `所在地：${item.address||'-'}`,
+    `物件ID：${propertyId}`,
+    '',
+    'この物件について詳しく知りたいです。'
+  ].join('\n');
+
+  message.dataset.propertyPrefilled="true";
+}
+
 function renderPropertyViews(items){
   renderPropertyGrid(items);
   renderPropertyDetail(items);
+  prefillPropertyContact(items);
 }
 
 async function refreshPropertiesInBackground(){
