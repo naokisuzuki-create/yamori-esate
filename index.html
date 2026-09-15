@@ -11,8 +11,10 @@
   <meta property="og:description" content="交野市を中心に中古物件の売買仲介・不動産売却をサポートします。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://naokisuzuki-create.github.io/yamori-estate/">
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
+  <script defer src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>
   <script defer src="script.js?v=15"></script>
+  <script defer src="contact.js?v=1"></script>
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"RealEstateAgent","name":"ヤモリ不動産","url":"https://naokisuzuki-create.github.io/yamori-estate/","address":{"@type":"PostalAddress","addressRegion":"大阪府","addressLocality":"交野市","streetAddress":"郡津4丁目20-10 2階"},"areaServed":"大阪府交野市"}</script>
 </head>
 <body>
@@ -55,7 +57,32 @@
     </dl>
   </div>
 </section>
-<section id="contact" class="section contact"><div class="wrap contact-form-grid"><div><p class="eyebrow">CONTACT</p><h2>まずは気軽にご相談ください。</h2><p>購入・売却の予定がまだ具体的でなくても大丈夫です。</p></div><form id="contactForm" class="contact-form"><label>お名前<span>必須</span><input name="name" required></label><label>メールアドレス<span>必須</span><input name="email" type="email" required></label><label>電話番号<input name="phone" inputmode="tel"></label><label>ご相談内容<select name="type"><option value="物件購入">物件購入</option><option value="不動産売却">不動産売却</option><option value="査定依頼">査定依頼</option><option value="その他">その他</option></select></label><label>お問い合わせ内容<span>必須</span><textarea name="message" rows="6" required></textarea></label><button class="btn green" type="submit">✉ メールで相談する</button><p class="form-note">送信ボタンを押すと、お使いのメールソフトが開きます。</p></form></div></section>
+<section id="contact" class="section contact">
+  <div class="wrap contact-form-grid">
+    <div>
+      <p class="eyebrow">CONTACT</p>
+      <h2>まずは気軽にご相談ください。</h2>
+      <p>購入・売却の予定がまだ具体的でなくても大丈夫です。</p>
+    </div>
+    <form id="contactFormSecure" class="contact-form" novalidate>
+      <input type="hidden" name="started_at" id="contactStartedAt">
+      <div class="contact-honeypot" aria-hidden="true">
+        <label>ウェブサイト<input name="website" tabindex="-1" autocomplete="off"></label>
+      </div>
+      <label>お名前<span>必須</span><input name="name" required maxlength="80" autocomplete="name"></label>
+      <label>メールアドレス<span>必須</span><input name="email" type="email" required maxlength="160" autocomplete="email"></label>
+      <label>電話番号<input name="phone" inputmode="tel" maxlength="40" autocomplete="tel"></label>
+      <label>ご相談内容<select name="type"><option value="物件購入">物件購入</option><option value="不動産売却">不動産売却</option><option value="査定依頼">査定依頼</option><option value="その他">その他</option></select></label>
+      <label>お問い合わせ内容<span>必須</span><textarea name="message" rows="6" required maxlength="3000"></textarea></label>
+      <div class="turnstile-wrap">
+        <div class="cf-turnstile" data-sitekey="0x4AAAAAAE0x0AzWoelTZNg1" data-theme="light"></div>
+      </div>
+      <button class="btn green" id="contactSubmit" type="submit">✉ 送信する</button>
+      <p id="contactStatus" class="form-status" role="status" aria-live="polite"></p>
+      <p class="form-note">送信内容はスパム対策の確認後、ヤモリ不動産へ送信されます。</p>
+    </form>
+  </div>
+</section>
 </main>
 <footer>
   <div class="wrap footer-inner">
