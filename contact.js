@@ -1,5 +1,4 @@
 const CONTACT_ENDPOINT = "https://script.google.com/macros/s/AKfycbx_jhrORToigZakIlBxbKX7EuBJOtBL2MDBXNmh5DapORvBSt7kZQK0QtxjswqjBdH9/exec";
-const CONTACT_FRAME_NAME = "yamoriContactFrame";
 
 function setupSecureContactForm(){
   const form = document.getElementById("contactFormSecure");
@@ -8,15 +7,6 @@ function setupSecureContactForm(){
   const startedAt = document.getElementById("contactStartedAt");
   const submitButton = document.getElementById("contactSubmit");
   const status = document.getElementById("contactStatus");
-
-  let iframe = document.querySelector(`iframe[name="${CONTACT_FRAME_NAME}"]`);
-  if(!iframe){
-    iframe = document.createElement("iframe");
-    iframe.name = CONTACT_FRAME_NAME;
-    iframe.title = "お問い合わせ送信結果";
-    iframe.hidden = true;
-    document.body.appendChild(iframe);
-  }
 
   const resetStartedAt = () => {
     if(startedAt) startedAt.value = String(Date.now());
@@ -30,6 +20,7 @@ function setupSecureContactForm(){
 
   const setSubmitting = submitting => {
     if(!submitButton) return;
+
     if(submitting){
       submitButton.disabled = true;
       submitButton.dataset.originalText = submitButton.textContent;
@@ -52,25 +43,7 @@ function setupSecureContactForm(){
 
   resetStartedAt();
 
-  window.addEventListener("message", event => {
-    const data = event.data;
-    if(!data || data.type !== "yamori-contact-result") return;
-
-    setSubmitting(false);
-    resetTurnstile();
-    resetStartedAt();
-
-    if(data.ok === true){
-      form.reset();
-      resetStartedAt();
-      setStatus("お問い合わせを送信しました。ありがとうございます。", "success");
-      return;
-    }
-
-    setStatus(data.message || "送信できませんでした。時間をおいて、もう一度お試しください。", "error");
-  });
-
-  form.addEventListener("submit", event => {
+  form.addEventListener("submit", async event => {
     event.preventDefault();
 
     if(!form.checkValidity()){
@@ -86,13 +59,7 @@ function setupSecureContactForm(){
       return;
     }
 
-    const postForm = document.createElement("form");
-    postForm.method = "POST";
-    postForm.action = CONTACT_ENDPOINT;
-    postForm.target = CONTACT_FRAME_NAME;
-    postForm.style.display = "none";
-
-    const fields = {
+    const payload = {
       action: "contact",
       name: String(formData.get("name") || "").trim(),
       email: String(formData.get("email") || "").trim(),
@@ -100,23 +67,37 @@ function setupSecureContactForm(){
       type: String(formData.get("type") || "").trim(),
       message: String(formData.get("message") || "").trim(),
       website: String(formData.get("website") || "").trim(),
-      started_at: String(formData.get("started_at") || ""),
+      started_at: Number(formData.get("started_at") || 0),
       turnstile_token: turnstileToken
     };
 
-    Object.entries(fields).forEach(([name, value]) => {
-      const input = document.createElement("input");
-      input.type = "hidden";
-      input.name = name;
-      input.value = value;
-      postForm.appendChild(input);
-    });
-
-    document.body.appendChild(postForm);
     setSubmitting(true);
     setStatus("送信しています…", "sending");
-    postForm.submit();
-    postForm.remove();
+
+    try{
+      await fetch(CONTACT_ENDPOINT, {
+        method: "POST",
+        mode: "no-cors",
+        cache: "no-store",
+        redirect: "follow",
+        headers: {
+          "Content-Type": "text/plain;charset=UTF-8"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      form.reset();
+      resetStartedAt();
+      resetTurnstile();
+      setStatus("お問い合わせを受け付けました。ありがとうございます。", "success");
+    }catch(error){
+      console.error("Contact submit failed.", error);
+      resetTurnstile();
+      resetStartedAt();
+      setStatus("送信できませんでした。通信環境をご確認のうえ、もう一度お試しください。", "error");
+    }finally{
+      setSubmitting(false);
+    }
   });
 }
 
