@@ -64,24 +64,24 @@ function doGet(e) {
 
 function doPost(e) {
   try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const body = parsePostBody_(e);
 
     if (body.action !== 'contact') {
-      return json_({ ok: false, error: 'Unsupported action' });
+      return contactResult_(false, 'Unsupported action');
     }
 
     const enabled = PropertiesService.getScriptProperties().getProperty('CONTACT_ENABLED') === 'true';
     if (!enabled) {
-      return json_({ ok: false, error: 'Contact endpoint is not enabled yet.' });
+      return contactResult_(false, 'Contact endpoint is not enabled yet.');
     }
 
     if (String(body.website || '').trim() !== '') {
-      return json_({ ok: true });
+      return contactResult_(true, '');
     }
 
     const startedAt = Number(body.started_at || 0);
     if (!startedAt || Date.now() - startedAt < 3000) {
-      return json_({ ok: false, error: 'Submission rejected.' });
+      return contactResult_(false, 'Submission rejected.');
     }
 
     const email = String(body.email || '').trim();
@@ -96,25 +96,22 @@ function doPost(e) {
     const rateKey = `contact:${Utilities.base64EncodeWebSafe(emailHash)}`;
 
     if (cache.get(rateKey)) {
-      return json_({
-        ok: false,
-        error: 'Please wait before sending again.'
-      });
+      return contactResult_(false, 'Please wait before sending again.');
     }
 
     const turnstileSecret = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SECRET');
     if (!turnstileSecret) {
-      return json_({ ok: false, error: 'Turnstile is not configured.' });
+      return contactResult_(false, 'Turnstile is not configured.');
     }
 
     const token = String(body.turnstile_token || '').trim();
     if (!token || !verifyTurnstile_(turnstileSecret, token)) {
-      return json_({ ok: false, error: 'CAPTCHA verification failed.' });
+      return contactResult_(false, 'CAPTCHA verification failed.');
     }
 
     const to = PropertiesService.getScriptProperties().getProperty('CONTACT_TO');
     if (!to) {
-      return json_({ ok: false, error: 'Contact recipient is not configured.' });
+      return contactResult_(false, 'Contact recipient is not configured.');
     }
 
     const name = String(body.name || '').trim();
@@ -123,10 +120,7 @@ function doPost(e) {
     const message = String(body.message || '').trim();
 
     if (!name || !email || !message) {
-      return json_({
-        ok: false,
-        error: 'Required fields are missing.'
-      });
+      return contactResult_(false, 'Required fields are missing.');
     }
 
     if (
@@ -136,10 +130,7 @@ function doPost(e) {
       type.length > 40 ||
       message.length > 3000
     ) {
-      return json_({
-        ok: false,
-        error: 'Input is too long.'
-      });
+      return contactResult_(false, 'Input is too long.');
     }
 
     MailApp.sendEmail({
@@ -157,11 +148,34 @@ function doPost(e) {
     });
 
     cache.put(rateKey, '1', 60);
-    return json_({ ok: true });
+    return contactResult_(true, 'お問い合わせを送信しました。ありがとうございます。');
   } catch (err) {
     console.error(err);
-    return json_({ ok: false, error: 'Server error' });
+    return contactResult_(false, 'Server error');
   }
+}
+
+function parsePostBody_(e) {
+  if (e && e.parameter && Object.keys(e.parameter).length) {
+    return e.parameter;
+  }
+
+  return JSON.parse((e && e.postData && e.postData.contents) || '{}');
+}
+
+function contactResult_(ok, message) {
+  const payload = JSON.stringify({
+    type: 'yamori-contact-result',
+    ok: ok === true,
+    message: String(message || '')
+  });
+
+  return HtmlService
+    .createHtmlOutput(
+      '<!doctype html><html><body><script>' +
+      'window.parent.postMessage(' + payload + ', "*");' +
+      '</script></body></html>'
+    );
 }
 
 function verifyTurnstile_(secret, token) {
