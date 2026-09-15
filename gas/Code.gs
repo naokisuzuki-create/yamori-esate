@@ -86,9 +86,20 @@ function doPost(e) {
 
     const email = String(body.email || '').trim();
     const cache = CacheService.getScriptCache();
-    const rateKey = `contact:${Utilities.base64EncodeWebSafe(email.toLowerCase())}`;
+
+    const emailHash = Utilities.computeDigest(
+      Utilities.DigestAlgorithm.SHA_256,
+      email.toLowerCase(),
+      Utilities.Charset.UTF_8
+    );
+
+    const rateKey = `contact:${Utilities.base64EncodeWebSafe(emailHash)}`;
+
     if (cache.get(rateKey)) {
-      return json_({ ok: false, error: 'Please wait before sending again.' });
+      return json_({
+        ok: false,
+        error: 'Please wait before sending again.'
+      });
     }
 
     const turnstileSecret = PropertiesService.getScriptProperties().getProperty('TURNSTILE_SECRET');
@@ -112,7 +123,23 @@ function doPost(e) {
     const message = String(body.message || '').trim();
 
     if (!name || !email || !message) {
-      return json_({ ok: false, error: 'Required fields are missing.' });
+      return json_({
+        ok: false,
+        error: 'Required fields are missing.'
+      });
+    }
+
+    if (
+      name.length > 80 ||
+      email.length > 160 ||
+      phone.length > 40 ||
+      type.length > 40 ||
+      message.length > 3000
+    ) {
+      return json_({
+        ok: false,
+        error: 'Input is too long.'
+      });
     }
 
     MailApp.sendEmail({
